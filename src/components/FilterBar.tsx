@@ -201,8 +201,8 @@ export function FilterBar({
               type="button"
               disabled={busy}
               onClick={onScore}
-              className="btn btn-quiet btn-grow sm:flex-none"
-              title="Usually not needed - filters already rescore live"
+              className="btn btn-line btn-grow sm:flex-none"
+              title="Re-rank the list with your current filters"
             >
               {loading && !aiLoading ? "Scoring…" : "Rescore"}
             </button>

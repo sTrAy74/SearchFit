@@ -81,12 +81,17 @@ export default function HomePage() {
   );
 
   const runScore = useCallback(
-    async (nextThesis: Thesis = thesis, nextCompanies: Company[] = companies) => {
+    async (
+      nextThesis: Thesis = thesis,
+      nextCompanies: Company[] = companies,
+      opts?: { announce?: boolean }
+    ) => {
       setLoading(true);
       setError(null);
       try {
         // Prefer local score for snappy filter → review loop; API stays for import parity.
         applyScore(nextThesis, nextCompanies);
+        let rankedCount = nextCompanies.length;
         const usingSeed = nextCompanies === SEED;
         if (!usingSeed) {
           const res = await fetch("/api/score", {
@@ -101,6 +106,12 @@ export default function HomePage() {
           const data = (await res.json()) as ScoreResponse;
           setResults(data.results);
           setTotalScored(data.totalScored);
+          rankedCount = data.totalScored;
+        }
+        if (opts?.announce) {
+          setNotice(
+            `Rescored ${rankedCount} companies with your current filters.`
+          );
         }
       } catch {
         setError("Could not score companies. Try again.");
@@ -241,7 +252,7 @@ export default function HomePage() {
             setThesis(next);
             applyScore(next, companies);
           }}
-          onScore={() => void runScore()}
+          onScore={() => void runScore(thesis, companies, { announce: true })}
           onAiThesis={handleAiThesis}
           loading={loading}
           aiLoading={aiLoading}
