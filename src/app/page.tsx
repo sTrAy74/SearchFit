@@ -1,69 +1,267 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useCallback, useState } from "react";
+import { FilterBar } from "@/components/FilterBar";
+import { ShortlistTable } from "@/components/ShortlistTable";
+import { UniverseBar } from "@/components/UniverseBar";
+import { getCompanies } from "@/lib/companies";
+import { scoredToCsv } from "@/lib/csv";
+import { DEFAULT_THESIS, rankCompanies } from "@/lib/scoring";
+import type {
+  Company,
+  IngestStats,
+  ScoredCompany,
+  ScoreResponse,
+  Thesis,
+} from "@/lib/types";
+
+const SEED = getCompanies();
+
+function scoreLocal(nextThesis: Thesis, nextCompanies: Company[]) {
+  const ranked = rankCompanies(nextCompanies, nextThesis);
+  return {
+    results: ranked,
+    totalScored: nextCompanies.length,
+  };
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value.trim());
+  }
+  return out;
+}
+
+/** Keep existing excludes when AI returns none; otherwise union both. */
+function mergeThesis(current: Thesis, incoming: Thesis): Thesis {
+  const excludeKeywords =
+    incoming.excludeKeywords.length > 0
+      ? uniqueStrings([...current.excludeKeywords, ...incoming.excludeKeywords])
+      : [...current.excludeKeywords];
+
+  return {
+    ...incoming,
+    excludeKeywords,
+    topN: incoming.topN || current.topN,
+  };
+}
+
+const INITIAL = scoreLocal(DEFAULT_THESIS, SEED);
+
+export default function HomePage() {
+  const [thesis, setThesis] = useState<Thesis>(DEFAULT_THESIS);
+  const [universe, setUniverse] = useState<Company[] | null>(null);
+  const [sourceLabel, setSourceLabel] = useState("sample list");
+  const [ingestStats, setIngestStats] = useState<IngestStats | null>(null);
+  const [results, setResults] = useState<ScoredCompany[]>(INITIAL.results);
+  const [totalScored, setTotalScored] = useState<number | null>(
+    INITIAL.totalScored
+  );
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const companies = universe ?? SEED;
+
+  const applyScore = useCallback(
+    (nextThesis: Thesis, nextCompanies: Company[]) => {
+      const scored = scoreLocal(nextThesis, nextCompanies);
+      setResults(scored.results);
+      setTotalScored(scored.totalScored);
+    },
+    []
+  );
+
+  const runScore = useCallback(
+    async (nextThesis: Thesis = thesis, nextCompanies: Company[] = companies) => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Prefer local score for snappy filter → review loop; API stays for import parity.
+        applyScore(nextThesis, nextCompanies);
+        const usingSeed = nextCompanies === SEED;
+        if (!usingSeed) {
+          const res = await fetch("/api/score", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              thesis: nextThesis,
+              companies: nextCompanies,
+            }),
+          });
+          if (!res.ok) throw new Error("Scoring failed");
+          const data = (await res.json()) as ScoreResponse;
+          setResults(data.results);
+          setTotalScored(data.totalScored);
+        }
+      } catch {
+        setError("Could not score companies. Try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [thesis, companies, applyScore]
+  );
+
+  function handleExport(rows: ScoredCompany[]) {
+    setExporting(true);
+    setError(null);
+    try {
+      const csv = scoredToCsv(rows);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "searchfit-shortlist.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError("CSV export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleAiThesis(prompt: string) {
+    setAiLoading(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/ai/thesis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, current: thesis }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI ICP parse failed");
+      const nextThesis = mergeThesis(thesis, data.thesis as Thesis);
+      setThesis(nextThesis);
+      setAiSummary(data.summary ?? "Profile applied to this list.");
+      if (data.notice) setNotice(data.notice);
+      await runScore(nextThesis, companies);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not read that profile. Check GEMINI_API_KEY or edit the filters."
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function handleIngest(
+    next: Company[],
+    stats: IngestStats,
+    label: string
+  ) {
+    setUniverse(next);
+    setIngestStats(stats);
+    setSourceLabel(label);
+    setResults([]);
+    setTotalScored(null);
+    setNotice(
+      `Loaded ${stats.unique} companies (${stats.duplicatesCollapsed} duplicates merged). Ranked with your current filters.`
+    );
+    void runScore(thesis, next);
+  }
+
+  function handleReset() {
+    setUniverse(null);
+    setIngestStats(null);
+    setSourceLabel("sample list");
+    setResults([]);
+    setTotalScored(null);
+    setNotice(null);
+    void runScore(thesis, SEED);
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col px-3 py-4 sm:px-5 sm:py-6 lg:px-8 xl:px-10">
+      <header className="animate-rise mb-5 sm:mb-6">
+        <div className="grid gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-10">
+          <div className="min-w-0">
+            <p className="display text-[clamp(2.1rem,7vw,3.75rem)] font-bold leading-[0.95] tracking-tight">
+              SearchFit
+            </p>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[var(--muted)] sm:mt-3 sm:text-base">
+              Rank your lead list, then decide Call, Enrich, or Skip before you
+              spend a credit.
+            </p>
+          </div>
+          <UniverseBar
+            universeSize={companies.length}
+            sourceLabel={sourceLabel}
+            stats={ingestStats}
+            onIngest={handleIngest}
+            onReset={handleReset}
+            isImported={universe != null}
+          />
+        </div>
+      </header>
+
+      <div className="space-y-5 sm:space-y-6">
+        {notice && (
+          <div className="animate-rise flex items-start justify-between gap-3 border-l-4 border-[var(--yellow)] bg-white px-4 py-3 text-sm text-[var(--ink)]">
+            <p>{notice}</p>
+            <button
+              type="button"
+              className="shrink-0 text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)]"
+              onClick={() => setNotice(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="animate-rise flex items-start justify-between gap-3 border-l-4 border-[var(--danger)] bg-[var(--danger-soft)] px-4 py-3 text-sm text-[var(--danger)]">
+            <p>{error}</p>
+            <button
+              type="button"
+              className="shrink-0 text-xs font-bold hover:underline"
+              onClick={() => setError(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <FilterBar
+          thesis={thesis}
+          onChange={(next) => {
+            setThesis(next);
+            applyScore(next, companies);
+          }}
+          onScore={() => void runScore()}
+          onAiThesis={handleAiThesis}
+          loading={loading}
+          aiLoading={aiLoading}
+          aiSummary={aiSummary}
+          onDismissSummary={() => setAiSummary(null)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <ShortlistTable
+          results={results}
+          totalScored={totalScored}
+          loading={loading}
+          onExport={handleExport}
+          exporting={exporting}
+        />
+      </div>
+
+      <footer className="mt-8 border-t border-[var(--line)] pb-8 pt-5 text-xs leading-5 text-[var(--muted)] sm:mt-10 sm:text-sm">
+        Set filters → review Call / Enrich / Skip → export. Describe in words
+        fills filters; Generate email drafts outreach.
+      </footer>
     </div>
   );
 }

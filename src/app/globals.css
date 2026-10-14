@@ -1,26 +1,265 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f7f7f5;
+  --bg-wash: #eeeeeb;
+  --surface: #ffffff;
+  --ink: #111111;
+  --muted: #5c5c5c;
+  --line: #e4e4e0;
+  --yellow: #ffdb00;
+  --yellow-ink: #111111;
+  --blue: #0058a3;
+  --blue-soft: #e8f1f8;
+  --call: #0a7a3e;
+  --call-soft: #e6f5ec;
+  --warn: #9a6700;
+  --warn-soft: #fff8e0;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  color: var(--ink);
+  background:
+    radial-gradient(900px 420px at 0% -5%, rgba(255, 219, 0, 0.28) 0%, transparent 55%),
+    radial-gradient(700px 380px at 100% 0%, rgba(0, 88, 163, 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, #fafaf8 0%, var(--bg) 40%, #f0f0ed 100%);
+  background-attachment: fixed;
+  font-family: var(--font-body), "Source Sans 3", sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(255, 219, 0, 0.45);
+}
+
+.display {
+  font-family: var(--font-display), "Outfit", sans-serif;
+  letter-spacing: -0.035em;
+}
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 42px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 2px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.btn-grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .btn-grow {
+    flex: 1 1 calc(50% - 0.25rem);
+  }
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-solid {
+  background: var(--yellow);
+  color: var(--yellow-ink);
+}
+
+.btn-solid:hover:not(:disabled) {
+  background: #ffe44d;
+}
+
+.btn-ink {
+  background: var(--ink);
+  color: #fff;
+}
+
+.btn-ink:hover:not(:disabled) {
+  background: #2a2a2a;
+}
+
+.btn-line {
+  background: transparent;
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.btn-line:hover:not(:disabled) {
+  background: var(--ink);
+  color: #fff;
+}
+
+.btn-quiet {
+  background: transparent;
+  color: var(--muted);
+  padding-inline: 10px;
+  font-weight: 600;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  color: var(--ink);
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.field {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: #fff;
+  padding: 11px 12px;
+  font-size: 15px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.field:focus {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px rgba(255, 219, 0, 0.55);
+}
+
+.link {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s ease;
+}
+
+.link:hover {
+  border-bottom-color: var(--blue);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes mark {
+  from {
+    width: 0;
+  }
+  to {
+    width: 4px;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-reveal {
+  animation: reveal 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.row-active {
+  position: relative;
+  background: #fffef6;
+}
+
+.row-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--yellow);
+  animation: mark 0.2s ease both;
+}
+
+/* Quiet scrollbars for list / detail panes */
+.scroll-quiet {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(17, 17, 17, 0.22) transparent;
+}
+
+.scroll-quiet::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scroll-quiet::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll-quiet::-webkit-scrollbar-thumb {
+  background: rgba(17, 17, 17, 0.18);
+  border-radius: 999px;
+}
+
+.scroll-quiet::-webkit-scrollbar-thumb:hover {
+  background: rgba(17, 17, 17, 0.32);
+}
+
+.scroll-quiet::-webkit-scrollbar-corner {
+  background: transparent;
 }
